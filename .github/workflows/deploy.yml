@@ -1,0 +1,73 @@
+name: Deploy Kafka to EC2
+
+on:
+  push:
+    branches:
+      - qa
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Kafka Services to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set deployment variables
+        id: set-vars
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
+            echo "env=QA" >> $GITHUB_OUTPUT
+            echo "branch=qa" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.pull_request.base.ref }}" == "main" ]]; then
+            echo "env=PROD" >> $GITHUB_OUTPUT
+            echo "branch=main" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Connect and deploy Kafka to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets[format('EC2_HOST_{0}', steps.set-vars.outputs.env)] }}
+          username: ${{ secrets[format('EC2_USER_{0}', steps.set-vars.outputs.env)] }}
+          key: ${{ secrets[format('EC2_KEY_{0}', steps.set-vars.outputs.env)] }}
+          port: 22
+          timeout: 30s
+          script: |
+            cd /home/ubuntu
+
+            if [ ! -d "TECNOSHOP-KAFKA" ]; then
+              git clone https://github.com/kev1226/TECNOSHOP-KAFKA.git
+            fi
+
+            cd TECNOSHOP-KAFKA
+            git fetch origin
+            git reset --hard origin/${{ steps.set-vars.outputs.branch }}
+
+            cp .env.example .env
+
+            echo "KAFKA_PORT=${{ secrets.KAFKA_PORT }}" >> .env
+            echo "ZOOKEEPER_PORT=${{ secrets.ZOOKEEPER_PORT }}" >> .env
+
+            required_vars=(KAFKA_PORT ZOOKEEPER_PORT)
+            for var in "${required_vars[@]}"; do
+              value=$(grep "^$var=" .env | cut -d '=' -f2-)
+              if [[ -z "$value" ]]; then
+                echo " ERROR: Variable $var no está definida o está vacía en .env"
+                exit 1
+              fi
+            done
+
+            if ! command -v docker-compose &> /dev/null; then
+              echo " Instalando docker-compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+
+            echo " Desplegando Kafka y Zookeeper..."
+            docker-compose down
+            docker-compose up -d --build
+            echo "Despliegue completo."
