@@ -45,6 +45,7 @@ jobs:
             fi
 
             cd TECNOSHOP-KAFKA
+            sudo chown -R ubuntu:ubuntu .
             git config --global --add safe.directory /home/ubuntu/TECNOSHOP-KAFKA
             git fetch origin
             git reset --hard origin/${{ steps.set-vars.outputs.branch }}
