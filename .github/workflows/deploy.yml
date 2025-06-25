@@ -1,16 +1,16 @@
-name: Deploy to EC2
+name: Deploy Kafka to EC2
 
 on:
   push:
     branches:
       - qa
-  pull_request:
-    branches:
-      - main
+  # pull_request:
+  #   branches:
+  #     - main
 
 jobs:
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 QA
     runs-on: ubuntu-latest
 
     steps:
@@ -23,12 +23,12 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
             echo "env=QA" >> $GITHUB_OUTPUT
             echo "branch=qa" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.pull_request.base.ref }}" == "main" ]]; then
-            echo "env=PROD" >> $GITHUB_OUTPUT
-            echo "branch=main" >> $GITHUB_OUTPUT
+          # elif [[ "${{ github.event.pull_request.base.ref }}" == "main" ]]; then
+          #   echo "env=PROD" >> $GITHUB_OUTPUT
+          #   echo "branch=main" >> $GITHUB_OUTPUT
           fi
 
-      - name: Connect and deploy Kafka to EC2
+      - name: Connect and deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets[format('EC2_HOST_{0}', steps.set-vars.outputs.env)] }}
@@ -54,8 +54,9 @@ jobs:
 
             echo "KAFKA_PORT=${{ secrets.KAFKA_PORT }}" >> .env
             echo "ZOOKEEPER_PORT=${{ secrets.ZOOKEEPER_PORT }}" >> .env
+            echo "EC2_HOST_QA=${{ secrets.EC2_HOST_QA }}" >> .env
 
-            required_vars=(KAFKA_PORT ZOOKEEPER_PORT)
+            required_vars=(KAFKA_PORT ZOOKEEPER_PORT EC2_HOST_QA)
             for var in "${required_vars[@]}"; do
               value=$(grep "^$var=" .env | cut -d '=' -f2-)
               if [[ -z "$value" ]]; then
